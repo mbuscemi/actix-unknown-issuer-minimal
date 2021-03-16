@@ -1,8 +1,7 @@
 use std::io::Result;
 use actix_web::{App, HttpServer, HttpResponse, Responder};
-use actix_web::web::Data;
-use deadpool_postgres::{ Client, Pool };
-use actix_web::web::get;
+use actix_web::web::{ get, Data };
+use sqlx::{Pool, Postgres, query_as};
 use dotenv::dotenv;
 
 mod settings;
@@ -12,12 +11,8 @@ mod db;
 async fn main() -> Result<()> {
     dotenv().ok();
 
-    //create config, and force hosts to be empty, otherwise I won't see real error messages on Heroku
-    //https://githubmemory.com/repo/bikeshedder/deadpool/issues/84
-    let mut settings = settings::Settings::from_env().unwrap();
-    settings.pg.hosts = Some(Vec::new());
-
-    let pool = db::create_pool(&settings);
+    let settings = settings::Settings::from_env().unwrap();
+    let pool = db::create_pool(&settings).await;
 
     HttpServer::new(move || {
         App::new()
@@ -29,10 +24,14 @@ async fn main() -> Result<()> {
         .await
 }
 
-async fn responder(db_pool: Data<Pool>) -> impl Responder {
-    let _client: Client = db_pool.get().await.expect("could not create db client from pool");
+async fn responder(db_pool: Data<Pool<Postgres>>) -> impl Responder {
+    let row: (i64,) = query_as("SELECT $1")
+        .bind(150_i64)
+        .fetch_one(db_pool.get_ref())
+        .await
+        .expect("could not execute query");
 
     HttpResponse::Ok()
         .content_type("text/html")
-        .body("")
+        .body(row.0.to_string())
 }
