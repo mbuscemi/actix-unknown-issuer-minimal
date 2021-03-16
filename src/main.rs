@@ -25,13 +25,22 @@ async fn main() -> Result<()> {
 }
 
 async fn responder(db_pool: Data<Pool<Postgres>>) -> impl Responder {
-    let row: (i64,) = query_as("SELECT $1")
-        .bind(150_i64)
+    let sql = r#"
+        SELECT 
+            title
+        FROM
+            matthewbuscemi_com.publications
+        WHERE
+            id = $1
+    "#;
+
+    let row: (String,) = query_as(sql)
+        .bind(1_i32)
         .fetch_one(db_pool.get_ref())
         .await
         .expect("could not execute query");
 
     HttpResponse::Ok()
         .content_type("text/html")
-        .body(row.0.to_string())
+        .body(row.0)
 }
